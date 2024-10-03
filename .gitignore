@@ -1,2 +1,3 @@
 *.env
 .conda/
+stock.xlsx

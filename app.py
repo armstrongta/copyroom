@@ -6,7 +6,7 @@ from datetime import datetime
 #import faicons
 
 
-excel_file = pd.ExcelFile("stock.xlsx")
+excel_file = pd.ExcelFile("stock_template.xlsx")
 
 df_inv = pd.read_excel(excel_file, sheet_name="inventory")
 df_check = pd.read_excel(excel_file, sheet_name="checkouts")
@@ -32,14 +32,7 @@ for _, row in dept_dict.iterrows():
 
 acct_options = [] 
   
-dtype_dict = {
-    "item_name": "object",
-    "quantity": "int64",
-    "memo": "object",
-    "date": "object",
-    "item_id": "int64",
-    "full_name": "object",
-}
+dtype_dict = { "item_name": "object", "quantity": "int64", "memo": "object", "date": "object", "item_id": "int64", "full_name": "object",}
   
 
 app_ui = ui.page_navbar(
@@ -47,12 +40,12 @@ app_ui = ui.page_navbar(
         ui.page_fillable(
             ui.layout_columns(
                 ui.card(
-                    ui.input_selectize( "user", "What is your name?", person_list,),
+                    ui.input_selectize( "user", "What is your name?", person_list, selected = "Steve Rogers"),
                     ui.input_select("acct_select", "Select an Account", choices = acct_options), #Choose default dept
                     ui.input_selectize( "items", "Select the Item(s) you are taking:", item_list, multiple=True), min_height = 600
                 ),
                 ui.card(
-                    "Double Click to adjust quantity",
+                    ui.tags.p("Double Click to adjust quantity", style="color: green; font-weight: bold;"),
                     ui.output_data_frame("checkout_df"),
                     ui.input_action_button("send", "Submit", class_="btn-success"),
                     ui.output_text("sendoff"), 
@@ -68,7 +61,7 @@ app_ui = ui.page_navbar(
 )
 
 def server(input, output, session):
-
+    
     @reactive.effect
     def update_acct_options():
         selected_user = input.user()   
@@ -106,7 +99,7 @@ def server(input, output, session):
         
         add_df['memo'] = add_df['memo'].apply(lambda x: "" if x == "Optional" else x)
         add_df = add_df[[ 'item_id',  'date', 'full_name', 'acct', 'item_name', 'quantity',  'memo']]
-        with pd.ExcelWriter("stock.xlsx", mode = "a", engine="openpyxl", if_sheet_exists="replace",) as writer:
+        with pd.ExcelWriter("stock_template.xlsx", mode = "a", engine="openpyxl", if_sheet_exists="replace",) as writer:
             # Now write only the 'checkouts' sheet
             add_df.to_excel(writer, sheet_name="checkouts", index = False)
         
