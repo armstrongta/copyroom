@@ -1,4 +1,7 @@
-# Hours Tanner has worked on this: 12
+# Run Statement below:
+#  & c:\Users\18015\OneDrive\repo\copy_room_inventory\.conda\python.exe -m shiny run --port 58597 c:\Users\18015\OneDrive\repo\copy_room_inventory\app.py
+
+# Hours Tanner has worked on this: 14
 from shiny import App, render, ui, reactive
 import pandas as pd
 from openpyxl import load_workbook
@@ -9,7 +12,7 @@ from datetime import datetime
 excel_file = pd.ExcelFile("stock_template.xlsx")
 
 df_inv = pd.read_excel(excel_file, sheet_name="inventory")
-df_check = pd.read_excel(excel_file, sheet_name="checkouts")
+df_check_init = pd.read_excel(excel_file, sheet_name="checkouts")
 person_dict = pd.read_excel(excel_file, sheet_name="person_dict")
 dept_dict = pd.read_excel(excel_file, sheet_name="dept_dict")
 
@@ -45,7 +48,7 @@ app_ui = ui.page_navbar(
                     ui.input_selectize( "items", "Select the Item(s) you are taking:", item_list, multiple=True), min_height = 600
                 ),
                 ui.card(
-                    ui.tags.p("Double Click to adjust quantity", style="color: green; font-weight: bold;"),
+                    ui.tags.p("Double Click to adjust quantity or memo", style="color: green; font-weight: bold;"),
                     ui.output_data_frame("checkout_df"),
                     ui.input_action_button("send", "Submit", class_="btn-success"),
                     ui.output_text("sendoff"), 
@@ -61,6 +64,7 @@ app_ui = ui.page_navbar(
 )
 
 def server(input, output, session):
+    df_check = reactive.value(df_check_init)
     
     @reactive.effect
     def update_acct_options():
@@ -81,9 +85,10 @@ def server(input, output, session):
     @render.text()
     @reactive.event(input.send)
     def sendoff():
+
         selected_user = input.user()
-        if selected_user == "":
-            return "I don't know who you are"
+        if selected_user == "Steve Rogers":
+            return "That can't be right, is it really you Captain America?"
         
         selected_acct = input.acct_select()
         
@@ -94,16 +99,19 @@ def server(input, output, session):
         dept = person_dict.loc[person_dict["full_name"]==selected_user,"department"].values[0]
         add_df["acct"] = nested_dict[f"{dept}"][f"{selected_acct}"]
         
-        add_df = pd.concat([add_df, df_check], ignore_index=True)
-        add_df = add_df.astype(dtype_dict)
+        df_check_2 = df_check()
+        df_combined = pd.concat([add_df, df_check_2], ignore_index=True)
+        df_combined["quantity"] = df_combined["quantity"].astype(int)
+        df_combined = df_combined.astype(dtype_dict)
         
-        add_df['memo'] = add_df['memo'].apply(lambda x: "" if x == "Optional" else x)
-        add_df = add_df[[ 'item_id',  'date', 'full_name', 'acct', 'item_name', 'quantity',  'memo']]
+        df_combined['memo'] = df_combined['memo'].apply(lambda x: "" if x == "Optional" else x)
+        df_combined = df_combined[[ 'item_id',  'date', 'full_name', 'acct', 'item_name', 'quantity',  'memo']]
         with pd.ExcelWriter("stock_template.xlsx", mode = "a", engine="openpyxl", if_sheet_exists="replace",) as writer:
             # Now write only the 'checkouts' sheet
-            add_df.to_excel(writer, sheet_name="checkouts", index = False)
+            df_combined.to_excel(writer, sheet_name="checkouts", index=False)
         
         ui.update_selectize("items", choices = item_list, selected=None)
+        df_check.set(df_combined)
         return f"Thank you {selected_user}!"
 
 
@@ -112,12 +120,11 @@ app = App(app_ui, server)
 
 #! Upload to github
 # TODO Shiny io or Aws for a server
-#TODO initial setup instructions (rename columns. replace the /)
-# Best just to open the Excel file and use Ctrl+f (name editor tab, inventory update/insert)
 
+# Best just to open the Excel file and use Ctrl+f for all edits?
+# (name editor tab, inventory update/insert)
 # enter/edit account information. add new teacher/department, enter copies tab.
-
-#Future edit costs tab, adit checkouts tab
+#Future edit costs tab, edit checkouts tab
 
 
 
@@ -127,7 +134,7 @@ app = App(app_ui, server)
 
 
 #* What I need:
-
+# Fill in your excel stock sheet. External monitor for everyone to use? Or a new laptop?
 
 
 #* What you'd like to see:
