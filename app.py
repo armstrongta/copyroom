@@ -1,17 +1,21 @@
 # Run Statement below:
 #  & c:\Users\18015\OneDrive\repo\copy_room_inventory\.conda\python.exe -m shiny run --port 58597 c:\Users\18015\OneDrive\repo\copy_room_inventory\app.py
 
-# Hours Tanner has worked on this: 17. 11:30
+# Hours Tanner has worked on this: 28   
 from shiny import App, render, ui, reactive
 import pandas as pd
 from openpyxl import load_workbook
 from datetime import datetime
-from myfunctions import data_prep
+from dateutil.relativedelta import relativedelta
+from myfunctions import supplies_send, copies_send, rep_down
+from pathlib import Path
+from htmltools import css
 #import faicons
-
+here = Path(__file__).parent
 
 excel_file = pd.ExcelFile("stock.xlsx")
 
+# The Excel Sheets loaded in
 df_inv = pd.read_excel(excel_file, sheet_name="inventory")
 df_check_init = pd.read_excel(excel_file, sheet_name="checkouts")
 person_dict = pd.read_excel(excel_file, sheet_name="person_dict")
@@ -24,12 +28,14 @@ item_dict = df_inv.set_index("item_id")[["item_name", "price"]].to_dict(orient="
 inverted_dict = df_inv.set_index("item_name")["item_id"].to_dict()
 item_list = df_inv["item_name"].unique().tolist()
 
+# Info Needed for the Copies Tab
 add_on_df = df_copies[df_copies["type"] == "add-on"]
 add_on_dict = add_on_df.set_index("item_id")["classification"].to_dict()
 single_df = df_copies[df_copies["type"] == "single"]
 single_dict = single_df.set_index("item_id")["classification"].to_dict()
 copies_price = df_copies[["item_id", "type", "price_per_sheet", "classification"]]
 
+# Creating the Dict to tie accounts to People
 nested_dict = {}
 for _, row in dept_dict.iterrows():
     dept = row["department"]
@@ -50,34 +56,75 @@ dtype_dict = { "item_name": "object", "quantity": "int64", "cost": "float64","me
 
 #-------------------------------------------------App UI Section-----------------------------------------------------------
 app_ui = ui.page_navbar(
-    ui.nav_panel("Copyroom Supplies",
+    ui.nav_panel(
+        "Copyroom Supplies",
         ui.page_fillable(
             ui.layout_columns(
                 ui.card(
-                    ui.input_selectize( "user", "What is your name?", person_list, selected = "Steve Rogers"),
-                    ui.input_select("acct_select", "Select an Account", choices = acct_options),
-                    ui.input_selectize( "items", "Select the Item(s) you are taking:", item_list, multiple=True), min_height = 600
+                    ui.input_selectize(
+                        "user",
+                        "What is your name?",
+                        person_list,
+                        selected="Steve Rogers",
+                    ),
+                    ui.input_select(
+                        "acct_select", "Select an Account", choices=acct_options
+                    ),
+                    ui.input_selectize(
+                        "items",
+                        "Select the Item(s) you are taking:",
+                        item_list,
+                        multiple=True,
+                    ),
+                    min_height="575px",
                 ),
                 ui.card(
-                    ui.tags.p("Double Click to adjust quantity or memo", style="color: green; font-weight: bold;"),
+                    ui.tags.p(
+                        "Double Click the box to adjust quantity or memo",
+                        style="color: green; font-weight: bold;",
+                    ),
                     ui.output_data_frame("checkout_df"),
                     ui.input_action_button("send", "Submit", class_="btn-success"),
-                    ui.output_text("sendoff"), 
+                    ui.output_text("sendoff"),
+                    fill=False,
                 ),
-            col_widths = (4,5)
+                col_widths=(4, 5),
+            ),
+            style=css(
+                background_image="url(https://cdn.pixabay.com/photo/2018/01/08/15/56/wolf-3069636_1280.jpg)",
+                # Galaxy Wolf "url(https://cdn.pixabay.com/photo/2018/01/08/15/56/wolf-3069636_1280.jpg)"
+                background_repeat="no-repeat",
+                background_size="cover",
+                background_position="center 20px",
             ),
         ),
     ),
-    
-    ui.nav_panel("Copies", 
+    ui.nav_panel(
+        "Copies",
         ui.output_ui("copies_ui"),
     ),
-    ui.nav_panel("Report Generator", "Dates")
+    ui.nav_panel("Report Generator", ui.output_ui("report_ui")),
+    title=ui.tags.div(
+        ui.tags.div(
+            "Copyroom App", style="margin-right: 10px;"
+        ),  # Text div with spacing
+        ui.output_image("logo", inline=True),  # Image output inline
+        style="display: flex; align-items: center;",
+    ),
+    theme=here / "assets/my_theme.css",
     
 )
 
-# -------------------------------------------------Server: Copyroom Supplies tab-----------------------------------
+
 def server(input, output, session):
+    @render.image
+    def logo():
+        img = {"src" : here / "assets/fremont_logo.jpeg", "width": "40px", "height": "30px"}
+        return img
+    
+    
+    
+# -------------------------------------------------Server: Copyroom Supplies tab-----------------------------------
     df_check = reactive.value(df_check_init)
     
     @reactive.effect
@@ -100,33 +147,17 @@ def server(input, output, session):
     @reactive.event(input.send)
     def sendoff():
         selected_user = input.user()
+        selected_acct = input.acct_select()
+        add_df = checkout_df.data_view()
+        df_check_2 = df_check()
+        
         if selected_user == "Steve Rogers":
             return "That can't be right, is it really you Captain America?"
-        
-        selected_acct = input.acct_select()
-              
-        add_df = checkout_df.data_view()
-        add_df["date"] = datetime.now().strftime("%m/%d/%y %I:%M %p")
-        
         if not add_df["item_name"].isin(inverted_dict.keys()).all():
-            return "Error, you are not allowed to change the item_name. Please Delete the items selected, and try again"
+            return "Error, you are not allowed to change the item_name. Please Delete the items selected, and try again. If your item is not listed, please leave a note for Karrie"
         
-        add_df["item_id"] = add_df["item_name"].apply(lambda x: inverted_dict.get(x))
-        add_df["full_name"] = selected_user
-        dept = person_dict.loc[person_dict["full_name"]==selected_user,"department"].values[0]
-        add_df["acct"] = nested_dict[f"{dept}"][f"{selected_acct}"]
-        add_df["cost"] = add_df.apply(lambda row: float(item_dict[row["item_id"]]["price"]) * row["quantity"], axis=1)
         
-        df_check_2 = df_check()
-        df_combined = pd.concat([add_df, df_check_2], ignore_index=True)
-        df_combined["quantity"] = df_combined["quantity"].astype(int)
-        df_combined = df_combined.astype(dtype_dict)
-        
-        df_combined['memo'] = df_combined['memo'].apply(lambda x: "" if x == "Optional" else x)
-        df_combined = df_combined[[ 'item_id',  'date', 'full_name', 'acct', 'item_name', 'quantity', 'cost', 'memo']]
-        with pd.ExcelWriter("stock.xlsx", mode = "a", engine="openpyxl", if_sheet_exists="replace",) as writer:
-            # Now write only the 'checkouts' sheet
-            df_combined.to_excel(writer, sheet_name="checkouts", index=False)
+        df_combined = supplies_send(add_df, df_check_2, selected_user, selected_acct)
         
         ui.update_selectize("items", choices = item_list, selected=None)
         ui.update_selectize("user", selected="Steve Rogers")
@@ -150,16 +181,18 @@ def server(input, output, session):
                     ui.output_data_frame("copies_calc"),
                     ui.input_numeric("sheets", "Pages (after copied)", 1, min=1), 
                     ui.input_numeric("copies", "Copies of each", 1, min=1),
-                    ui.input_date("copy_date", "Date Needed", format = "mm/dd/yy")
+                    ui.input_date("copy_date", "Date Needed", format = "mm/dd/yy"),
+                    fill = False,
                 ),
                 ui.card(
                     ui.output_text_verbatim("copies_sum"),
                     ui.output_ui("copy_memo_ui"),
                     ui.input_action_button("send_copies", "Submit", class_="btn-success"),
                     ui.output_text("sendoff_copies"), 
+                    fill = False,
                     
                 ),
-            col_widths = (2,3,5), height = '600px'
+            col_widths = (2,3,5), height = '575px'
             ),
         ),
     
@@ -224,35 +257,21 @@ def server(input, output, session):
     @reactive.event(input.send_copies)
     def sendoff_copies():
         selected_user = input.user_copies()
+        selected_acct = input.acct_select_copies()
+        add_df = add_copy()
+        df_check_2 = df_check()
+        total_2 = total.get()
+        date = input.copy_date()
+        memo = input.copy_memo()
+        sheets = input.sheets()
+        copies = input.copies()
+        
         if selected_user == "Steve Rogers":
             return "That can't be right, Did Captain America order copies again?!"
         
-        selected_acct = input.acct_select_copies()
         
-        add_df = add_copy()
-        add_df = add_df.rename(columns = {"classification": "item_name"})
-        add_df = add_df[add_df["type"]!="add-on"]
-        add_df = add_df.drop(columns = "type")
         
-        add_df["full_name"] = selected_user
-        dept = person_dict.loc[person_dict["full_name"]==selected_user,"department"].values[0]
-        add_df["acct"] = nested_dict[f"{dept}"][f"{selected_acct}"]
-        
-        add_df["quantity"] = input.sheets() * input.copies()
-        add_df["cost"] = total.get()
-        add_df["memo"] = input.copy_memo()
-        date = input.copy_date()
-        add_df["date"] = date.strftime("%m/%d/%y")
-        
-        df_check_2 = df_check()
-        df_combined = pd.concat([add_df, df_check_2], ignore_index=True)
-        df_combined["quantity"] = df_combined["quantity"].astype(int)
-        df_combined = df_combined.astype(dtype_dict)
-        
-        df_combined = df_combined[[ 'item_id',  'date', 'full_name', 'acct', 'item_name', 'quantity', 'cost', 'memo']]
-        with pd.ExcelWriter("stock.xlsx", mode = "a", engine="openpyxl", if_sheet_exists="replace",) as writer:
-            # Now write only the 'checkouts' sheet
-            df_combined.to_excel(writer, sheet_name="checkouts", index=False)
+        df_combined = copies_send(add_df, df_check_2, total_2, sheets, copies, date, memo, selected_user, selected_acct)
         
         ui.update_selectize("user_copies", selected="Steve Rogers")
         ui.update_checkbox_group("add_ons", selected = [])
@@ -261,26 +280,58 @@ def server(input, output, session):
         return f"You're doing Great Karrie! I'm sure {selected_user} appreciates it :)"
     
 
+# -------------------------------------------------UI: Report tab----------------------------------- 
+    today = datetime.today()
+
+    first_day_prev_month = (today.replace(day=1) - relativedelta(months=1)).strftime("%Y-%m-%d")
+    last_day_prev_month = (today.replace(day=1) - relativedelta(days=1)).strftime("%Y-%m-%d")
+    
+    @render.ui
+    def report_ui():
+        return ui.page_fillable(
+            ui.layout_columns(
+                ui.card((ui.input_date_range("daterange", "Date range", start=first_day_prev_month, end = last_day_prev_month, format = 'mm-dd-yyyy'),),
+                        ui.input_action_button("report_create", "Download Report", class_ = "btn-info"),
+                        ui.output_text("report_done"),
+                ),
+                col_widths = (3)
+            ),
+        )
+
+
+# -------------------------------------------------UI: Report tab-----------------------------------
+    @render.text()
+    @reactive.event(input.report_create)
+    def report_done():
+        start = str(input.daterange()[0])
+        end = str(input.daterange()[1])
+        df_check_2 = df_check()
+        
+        finish = rep_down(df_check_2, start, end)
+        return f"Report Downloaded. {finish}"
+        
+
+
+
 app = App(app_ui, server)
 
 
-#! Upload to github
 # TODO Shiny io or Aws for a server
 
 #* Teach how:
 # to ctrl + F/add filters in excel for edits
-# make app run in browser by default
+# Filter in the excel file to see specific accounts
 
-#* What I need:
-# Fill in your excel stock sheet. External monitor for everyone to use? Or a new laptop?
 
 #* Questions
 # Do people ever wonder the price? Would they like to know? (use patches to fill in price column with an effect)
 
 
 #* What you'd like to see:
-# add comments
-# Add report download page, copies 1000+
+# add comments to this code.
+# Add in automated emails/ start tracking inventory.
+
 # Data backed up somewhere
-# Make sure that new pulls don't effect what is in stock file
-# Fremont Theme
+
+# New sheet in stock.xlsx where we put school name, report_to_email. maybe hide the assets folder from git.
+# Things that are fremont specific to generalize: logo, background, my_theme.py, 
