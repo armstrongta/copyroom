@@ -63,7 +63,7 @@ app_ui = ui.page_navbar(
                 ui.card(
                     ui.input_selectize(
                         "user",
-                        "What is your name?",
+                        "What is your LAST name?",
                         person_list,
                         selected="Steve Rogers",
                     ),
@@ -130,10 +130,14 @@ def server(input, output, session):
     @reactive.effect
     def update_acct_options():
         selected_user = input.user()   
+        print(f"selected: {selected_user}")
+        try:
+            dept = person_dict.loc[person_dict["full_name"]==selected_user,"department"].values[0]
+            acct_options = list(nested_dict.get(dept, {}).keys())
+            ui.update_select("acct_select", choices = acct_options)
+        except:
+            print("Couldn't find person or dept")
 
-        dept = person_dict.loc[person_dict["full_name"]==selected_user,"department"].values[0]
-        acct_options = list(nested_dict.get(dept, {}).keys())
-        ui.update_select("acct_select", choices = acct_options)
 
     @render.data_frame
     def checkout_df():
@@ -206,13 +210,16 @@ def server(input, output, session):
 
     @reactive.effect
     def update_acct_options_copies():
-        selected_user = input.user_copies()
+        try:
+            selected_user = input.user_copies()
 
-        dept = person_dict.loc[
-            person_dict["full_name"] == selected_user, "department"
-        ].values[0]
-        acct_options_copies = list(nested_dict.get(dept, {}).keys())
-        ui.update_select("acct_select_copies", choices=acct_options_copies)
+            dept = person_dict.loc[
+                person_dict["full_name"] == selected_user, "department"
+            ].values[0]
+            acct_options_copies = list(nested_dict.get(dept, {}).keys())
+            ui.update_select("acct_select_copies", choices=acct_options_copies)
+        except:
+            print("Couldn't find the person")
         
     @render.data_frame
     def copies_calc():
@@ -280,7 +287,7 @@ def server(input, output, session):
         return f"You're doing Great Karrie! I'm sure {selected_user} appreciates it :)"
     
 
-# -------------------------------------------------UI: Report tab----------------------------------- 
+# -------------------------------------------------Server: Report tab----------------------------------- 
     today = datetime.today()
 
     first_day_prev_month = (today.replace(day=1) - relativedelta(months=1)).strftime("%Y-%m-%d")
