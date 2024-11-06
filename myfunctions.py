@@ -4,6 +4,8 @@ import os
 from openpyxl import load_workbook
 from datetime import datetime
 
+#* From here to dtype_dict is a dataload, copied in explore.ipynb, app.py, myfunctions.py
+# Note: I would have create a data_prep function, but here would have been 20 returned values
 excel_file = pd.ExcelFile("stock.xlsx")
 
 # The Excel Sheets loaded in
@@ -12,6 +14,12 @@ df_check_init = pd.read_excel(excel_file, sheet_name="checkouts")
 person_dict = pd.read_excel(excel_file, sheet_name="person_dict")
 dept_dict = pd.read_excel(excel_file, sheet_name="dept_dict")
 df_copies = pd.read_excel(excel_file, sheet_name="copies_dict")
+# Grab details specific to the school:
+df_school = pd.read_excel(excel_file, sheet_name="school")
+school_name = df_school["School Name"].iloc[0]
+background_link = df_school["background_link"].iloc[0]
+buffer_amount = df_school["buffer_amount"].iloc[0]
+copy_person = df_school["users_name"].iloc[0]
 
 person_list = person_dict["full_name"].unique().tolist()
 
@@ -42,7 +50,7 @@ acct_options = []
 acct_options_copies = []
   
 dtype_dict = { "item_name": "object", "quantity": "int64", "cost": "float64","memo": "object", "date": "object", "item_id": "int64", "full_name": "object",}
-  
+
   
 def supplies_send(add_df, df_check_2, selected_user, selected_acct):
     add_df["date"] = datetime.now().strftime("%m/%d/%y %I:%M %p")
@@ -95,6 +103,8 @@ def copies_send(add_df, df_check_2, total, sheets, copies, date, memo, selected_
 
 # Define the date parsing function to handle both formats
 def parse_date(date_str):
+    if isinstance(date_str, datetime):
+        return date_str
     try:
         date_str = str(date_str)
         # Try parsing with the format "MM/DD/YY"
@@ -115,25 +125,43 @@ def rep_down(df_check_2, start, end):
         # Define the start and end date for filtering
         start_date = datetime.strptime(start, "%Y-%m-%d")
         end_date = datetime.strptime(f"{end} 23:59:59", "%Y-%m-%d %H:%M:%S")
+        #print(f"start: {start_date}, end: {end_date}")
+        #print(f"sent_df shape: {df_check_2.shape}")
 
         # Filter the DataFrame for rows where 'date' is within the specified range
         filtered_df = df_check_2[(df_check_2["date"] >= start_date) & (df_check_2["date"] <= end_date)]
-        print(df_check_2.info())
+        #print(f"filterd_df shape: {filtered_df.shape}")
+        
         report_df = filtered_df.groupby("acct", as_index = False)["cost"].sum()
         report_df["cost"] = report_df["cost"].round(2)
+        #print(f"report_df shape: {report_df.shape}")
+        
+        # Add in Account Names
+        report_df = report_df.merge(dept_dict[['account', 'number']], 
+                            left_on="acct", right_on = "number",
+                            how="left")
+
+        # Optionally rename the new column if needed
+        report_df.rename(columns={'account': 'Account Name'}, inplace=True)
+        report_df = report_df.drop(columns=["number"])
         
         # Format the start and end dates for the filename
         start_str = datetime.strptime(start, "%Y-%m-%d").strftime("%m-%d")
         end_str = datetime.strptime(end, "%Y-%m-%d").strftime("%m-%d")
         filename = f"{start_str}_to_{end_str}_financial_report.xlsx"
 
+        # sorting filtered_df
+        detail_df = filtered_df.sort_values(by = 'acct').reset_index(drop=True)
         
         # Delete any existing files that end with "report.xlsx"
         for file in glob.glob("*report.xlsx"):
             os.remove(file)
         # Save report_df to an Excel file with the formatted filename
-        report_df.to_excel(filename, index=False)
-        return ""
+        with pd.ExcelWriter(filename, engine="openpyxl") as writer:
+            report_df.to_excel(writer, sheet_name='report_summary', index=False)
+            detail_df.to_excel(writer, sheet_name="report_details", index=False)
+            return ""
+        
     except Exception as e:
         return f"Errored {(e)}"
     
