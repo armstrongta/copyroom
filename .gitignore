@@ -1,2 +1,4 @@
 *.env
 stock.xlsx
+assets/*
+*_financial_report.xlsx

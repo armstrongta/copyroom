@@ -1,7 +1,7 @@
 # Run Statement below:
 #  & c:\Users\18015\OneDrive\repo\copy_room_inventory\.conda\python.exe -m shiny run --port 58597 c:\Users\18015\OneDrive\repo\copy_room_inventory\app.py
 
-# Hours Tanner has worked on this: 28   
+# Hours Tanner has worked on this: 35  8:30- 
 from shiny import App, render, ui, reactive
 import pandas as pd
 from openpyxl import load_workbook
@@ -13,6 +13,8 @@ from htmltools import css
 #import faicons
 here = Path(__file__).parent
 
+#* From here to dtype_dict is a dataload, copied in explore.ipynb, app.py, myfunctions.py
+# Note: I would have create a data_prep function, but here would have been 20 returned values
 excel_file = pd.ExcelFile("stock.xlsx")
 
 # The Excel Sheets loaded in
@@ -21,6 +23,12 @@ df_check_init = pd.read_excel(excel_file, sheet_name="checkouts")
 person_dict = pd.read_excel(excel_file, sheet_name="person_dict")
 dept_dict = pd.read_excel(excel_file, sheet_name="dept_dict")
 df_copies = pd.read_excel(excel_file, sheet_name="copies_dict")
+# Grab details specific to the school:
+df_school = pd.read_excel(excel_file, sheet_name="school")
+school_name = df_school["School Name"].iloc[0]
+background_link = df_school["background_link"].iloc[0]
+buffer_amount = df_school["buffer_amount"].iloc[0]
+copy_person = df_school["users_name"].iloc[0]
 
 person_list = person_dict["full_name"].unique().tolist()
 
@@ -51,10 +59,10 @@ acct_options = []
 acct_options_copies = []
   
 dtype_dict = { "item_name": "object", "quantity": "int64", "cost": "float64","memo": "object", "date": "object", "item_id": "int64", "full_name": "object",}
-  
 
 
-#-------------------------------------------------App UI Section-----------------------------------------------------------
+
+#-------------------------------------------------Copyroom Supplies UI Section-----------------------------------------------------------
 app_ui = ui.page_navbar(
     ui.nav_panel(
         "Copyroom Supplies",
@@ -63,11 +71,11 @@ app_ui = ui.page_navbar(
                 ui.card(
                     ui.input_selectize(
                         "user",
-                        "What is your LAST name?",
-                        person_list,
+                        "Type in your LAST name",
+                        sorted(person_list),
                         selected="Steve Rogers",
                     ),
-                    ui.input_select(
+                    ui.input_selectize(
                         "acct_select", "Select an Account", choices=acct_options
                     ),
                     ui.input_selectize(
@@ -81,7 +89,7 @@ app_ui = ui.page_navbar(
                 ui.card(
                     ui.tags.p(
                         "Double Click the box to adjust quantity or memo",
-                        style="color: green; font-weight: bold;",
+                        style="color: red; font-weight: bold;",
                     ),
                     ui.output_data_frame("checkout_df"),
                     ui.input_action_button("send", "Submit", class_="btn-success"),
@@ -91,11 +99,10 @@ app_ui = ui.page_navbar(
                 col_widths=(4, 5),
             ),
             style=css(
-                background_image="url(https://cdn.pixabay.com/photo/2018/01/08/15/56/wolf-3069636_1280.jpg)",
-                # Galaxy Wolf "url(https://cdn.pixabay.com/photo/2018/01/08/15/56/wolf-3069636_1280.jpg)"
+                background_image=f"url({background_link})",
                 background_repeat="no-repeat",
                 background_size="cover",
-                background_position="center 20px",
+                background_position=f"center {buffer_amount}px",
             ),
         ),
     ),
@@ -112,19 +119,18 @@ app_ui = ui.page_navbar(
         style="display: flex; align-items: center;",
     ),
     theme=here / "assets/my_theme.css",
-    
 )
 
 
 def server(input, output, session):
     @render.image
     def logo():
-        img = {"src" : here / "assets/fremont_logo.jpeg", "width": "40px", "height": "30px"}
+        img = {"src" : here / "assets/school_logo.jpeg", "width": "40px", "height": "30px"}
         return img
     
     
     
-# -------------------------------------------------Server: Copyroom Supplies tab-----------------------------------
+# -------------------------------------------------Server: Copyroom Supplies-----------------------------------
     df_check = reactive.value(df_check_init)
     
     @reactive.effect
@@ -134,6 +140,7 @@ def server(input, output, session):
         try:
             dept = person_dict.loc[person_dict["full_name"]==selected_user,"department"].values[0]
             acct_options = list(nested_dict.get(dept, {}).keys())
+            acct_options = sorted(acct_options)
             ui.update_select("acct_select", choices = acct_options)
         except:
             print("Couldn't find person or dept")
@@ -141,7 +148,13 @@ def server(input, output, session):
 
     @render.data_frame
     def checkout_df():
-        checkout = pd.DataFrame(input.items(), columns=["item_name"])
+        items = input.items()
+        item_prices = []
+        for item in items:
+            item_price = df_inv.loc[df_inv["item_name"] == item, "price"].iloc[0]
+            item_prices.append(item_price)
+            
+        checkout = pd.DataFrame(list(zip(items, item_prices)), columns=["item_name", "Price per Item"])
         checkout["quantity"] = 1
         checkout["memo"] = "Optional"
         
@@ -153,6 +166,7 @@ def server(input, output, session):
         selected_user = input.user()
         selected_acct = input.acct_select()
         add_df = checkout_df.data_view()
+        add_df = add_df.drop(columns = ["Price per Item"])
         df_check_2 = df_check()
         
         if selected_user == "Steve Rogers":
@@ -176,8 +190,8 @@ def server(input, output, session):
         return ui.page_fillable(
             ui.layout_columns(
                 ui.card(
-                    ui.input_selectize( "user_copies", "Which Teacher?", person_list, selected = "Steve Rogers"),
-                    ui.input_select("acct_select_copies", "Select an Account", choices = acct_options_copies), 
+                    ui.input_selectize( "user_copies", "Which Teacher?", sorted(person_list), selected = "Steve Rogers"),
+                    ui.input_selectize("acct_select_copies", "Select an Account", choices = sorted(acct_options_copies)), 
                     ui.input_checkbox_group("add_ons", "Desired Add-ons", add_on_dict),
                     ui.input_selectize("single", "Paper Type", single_dict)
                 ),
@@ -284,7 +298,7 @@ def server(input, output, session):
         ui.update_checkbox_group("add_ons", selected = [])
         ui.update_selectize("single", selected = 1004)
         df_check.set(df_combined)
-        return f"You're doing Great Karrie! I'm sure {selected_user} appreciates it :)"
+        return f"You're doing Great {copy_person}! I'm sure {selected_user} appreciates it :)"
     
 
 # -------------------------------------------------Server: Report tab----------------------------------- 
@@ -324,21 +338,19 @@ app = App(app_ui, server)
 
 
 # TODO Shiny io or Aws for a server
+"""
+Why if refresh the page the checkouts disappear. 
 
-#* Teach how:
-# to ctrl + F/add filters in excel for edits
-# Filter in the excel file to see specific accounts
+Staples only add on per copy. 
 
+Put every function in try except brackets. Return the errors
 
-#* Questions
-# Do people ever wonder the price? Would they like to know? (use patches to fill in price column with an effect)
+Tab for editting checkout data:
+    delete rows, edit rows, sorting and filtering
+
 
 
 #* What you'd like to see:
 # add comments to this code.
 # Add in automated emails/ start tracking inventory.
-
-# Data backed up somewhere
-
-# New sheet in stock.xlsx where we put school name, report_to_email. maybe hide the assets folder from git.
-# Things that are fremont specific to generalize: logo, background, my_theme.py, 
+"""
