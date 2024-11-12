@@ -8,3 +8,8 @@
 * Once you've finished, save/close "stock.xlsx", and in your IDE run the app!
 
 # Programmer Notes
+
+
+
+# Copyright Info
+Copyroom Application © 2024 by Tanner Armstrong is licensed under CC BY-NC-ND 4.0. To view a copy of this license, visit https://creativecommons.org/licenses/by-nc-nd/4.0/
