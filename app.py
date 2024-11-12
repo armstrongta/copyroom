@@ -1,7 +1,7 @@
 # Run Statement below:
 #  & c:\Users\18015\OneDrive\repo\copy_room_inventory\.conda\python.exe -m shiny run --port 58597 c:\Users\18015\OneDrive\repo\copy_room_inventory\app.py
 
-# Hours Tanner has worked on this: 35  8:30- 
+# Hours Tanner has worked on this: 40.5 
 from shiny import App, render, ui, reactive
 import pandas as pd
 from openpyxl import load_workbook
@@ -125,7 +125,7 @@ app_ui = ui.page_navbar(
 def server(input, output, session):
     @render.image
     def logo():
-        img = {"src" : here / "assets/school_logo.jpeg", "width": "40px", "height": "30px"}
+        img = {"src" : here / "assets/school_logo.jpg", "width": "40px", "height": "30px"}
         return img
     
     
@@ -339,9 +339,15 @@ app = App(app_ui, server)
 
 # TODO Shiny io or Aws for a server
 """
-Why if refresh the page the checkouts disappear. 
 
 Staples only add on per copy. 
+can list multiple accounts under a name... didnt work
+
+send myself the new stock.xlsx mom fixed
+
+date format in the report.
+quantity resets to 0
+
 
 Put every function in try except brackets. Return the errors
 
