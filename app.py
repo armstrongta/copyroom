@@ -1,7 +1,7 @@
 # Run Statement below:
 #  & c:\Users\18015\OneDrive\repo\copy_room_inventory\.conda\python.exe -m shiny run --port 58597 c:\Users\18015\OneDrive\repo\copy_room_inventory\app.py
 
-# Hours Tanner has worked on this: 40.5 
+# Hours Tanner has worked on this: 41.5 
 from shiny import App, render, ui, reactive
 import pandas as pd
 from openpyxl import load_workbook
@@ -125,7 +125,7 @@ app_ui = ui.page_navbar(
 def server(input, output, session):
     @render.image
     def logo():
-        img = {"src" : here / "assets/school_logo.jpg", "width": "40px", "height": "30px"}
+        img = {"src" : here / "assets/school_logo.jpeg", "width": "40px", "height": "30px"}
         return img
     
     
@@ -343,20 +343,23 @@ app = App(app_ui, server)
 Staples only add on per copy. 
 can list multiple accounts under a name... didnt work
 
-send myself the new stock.xlsx mom fixed
-
 date format in the report.
 quantity resets to 0
 
 
 Put every function in try except brackets. Return the errors
+Also find a way to decide non-null columns, and if there are any nulls as data is being read in then we should error and tell them.
 
 Tab for editting checkout data:
     delete rows, edit rows, sorting and filtering
+    also, keep a detailed log of every action that happens there
 
+reports / visuals on a new page to see trends of accounts
 
 
 #* What you'd like to see:
 # add comments to this code.
 # Add in automated emails/ start tracking inventory.
 """
+
+
